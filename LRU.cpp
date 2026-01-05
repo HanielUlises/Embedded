@@ -5,18 +5,18 @@
 using namespace std;
 
 struct LRU {
-      const int maxCapacity = 1000;
-      int currentCount = 0;
-      unordered_map<int, int> valueMap;
-      unordered_map<int,  list<int>::iterator> iteratorMap;
+      const int max_capacity = 1000;
+      int current_count = 0;
+      unordered_map<int, int> value_map;
+      unordered_map<int,  list<int>::iterator> iterator_map;
       list<int> keys;
 
       bool getEntry(int key, int &value) {
-          if(valueMap.find(key) != valueMap.end()){
-              keys.erase(iteratorMap[key]);
+          if(value_map.find(key) != value_map.end()){
+              keys.erase(iterator_map[key]);
               keys.push_front(key);
-              iteratorMap[key] = keys.begin();
-              value = valueMap[key];
+              iterator_map[key] = keys.begin();
+              value = value_map[key];
               return true;
           }
           else{
@@ -25,24 +25,24 @@ struct LRU {
       }
 
       void insertPair(int key, int value) {
-          if(valueMap.find(key) != valueMap.end()){
-              keys.erase(iteratorMap[key]);
+          if(value_map.find(key) != value_map.end()){
+              keys.erase(iterator_map[key]);
               keys.push_front(key);
-              iteratorMap[key] = keys.begin();
-              valueMap[key] = value;
+              iterator_map[key] = keys.begin();
+              value_map[key] = value;
           }
           else{
-              if(currentCount >= maxCapacity){
+              if(current_count >= max_capacity){
                   int LRUKey = keys.back();
-                  valueMap.erase(LRUKey);
-                  iteratorMap.erase(LRUKey);
+                  value_map.erase(LRUKey);
+                  iterator_map.erase(LRUKey);
                   keys.pop_back();
-                  currentCount--;
+                  current_count--;
               }
-              valueMap[key]= value;
+              value_map[key]= value;
               keys.push_front(key);
-              iteratorMap[key] = keys.begin();
-              currentCount++;
+              iterator_map[key] = keys.begin();
+              current_count++;
           }
       }
 };
