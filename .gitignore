@@ -1,0 +1,35 @@
+# Ignore the entire build directory (recommended approach)
+build/
+Debug/
+Release/
+
+# Object files, dependency files, and linker outputs
+*.o
+*.obj
+*.d
+*.map
+
+# Executables/Firmware specific to embedded systems
+*.elf
+*.hex
+*.bin
+*.srec
+
+# IDE and Editor-specific files
+.vscode/
+.eclipse/
+*.uvproj*
+*.ewp
+*.mex
+*.suo
+*.user
+*.ncb
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Temporary and log files
+*.log
+*.tmp
+*.swp
