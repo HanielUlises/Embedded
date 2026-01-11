@@ -17,21 +17,23 @@ enum ButtonType
 // Menu states
 enum MenuState
 {
-    MENU_SHOW_TIME,
-    MENU_SET_HOUR,
-    MENU_SET_MIN,
-    MENU_SET_ALARM_HOUR,
-    MENU_SET_ALARM_MIN
+    MENU_SHOW_TIME,      // Normal time display
+    MENU_SHOW_SET,       // Display "SET" text
+    MENU_SHOW_AL,        // Display "AL" text
+    MENU_SET_HOUR,       // Setting time hour (blinking)
+    MENU_SET_MIN,        // Setting time minutes (blinking)
+    MENU_SET_ALARM_HOUR, // Setting alarm hour (blinking)
+    MENU_SET_ALARM_MIN   // Setting alarm minutes (blinking)
 };
 
 class Clock
 {
 private:
     // 7-segment Display
-    TM1637* display = NULL;
+    TM1637* display;
 
     // Timer variable to count time
-    hw_timer_t *timer = NULL;
+    hw_timer_t *timer;
 
     // Buzzer pin and alarm tone
     uint8_t buzzer_pin;
@@ -53,8 +55,12 @@ private:
     uint8_t half_second_counter;
     bool colon_on;
     
-    // Display blink state for alarm
+    // Display blink state for setting mode and alarm
     bool display_blink_state;
+    
+    // Counter for "Off" display timeout
+    unsigned long off_display_start_time;
+    bool showing_off;
 
 public:
     // Constructor
@@ -78,6 +84,7 @@ public:
     void show();
     void run();
 
+    // Friend function for timer interrupt
     friend void update_time();
 };
 

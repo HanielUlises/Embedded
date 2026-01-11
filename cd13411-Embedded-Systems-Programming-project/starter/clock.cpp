@@ -8,10 +8,11 @@
 #define MIN_SHIFT   6
 #define SEC_SHIFT   0
 
+#define OFF_DISPLAY_TIME 3000
+
 Clock* g_clock_instance = nullptr;
 
-// Static function: Update time, show things on display
-//                  and check alarm trigger
+// Static function: Update time, show things on display and check alarm trigger
 void IRAM_ATTR update_time()
 {
     if (!g_clock_instance) return;
@@ -20,6 +21,8 @@ void IRAM_ATTR update_time()
     
     clk->half_second_counter++;
     clk->colon_on = !clk->colon_on;
+    
+    clk->display_blink_state = !clk->display_blink_state;
     
     if (clk->half_second_counter >= 2) {
         clk->half_second_counter = 0;
@@ -54,10 +57,10 @@ Clock::Clock() : display(nullptr), timer(nullptr), buzzer_pin(0),
                  current_time(0), alarm_time(0), alarm_enabled(false),
                  alarm_ringing(false), alarm_start_time(0), 
                  menu_state(MENU_SHOW_TIME), half_second_counter(0),
-                 colon_on(true), display_blink_state(true) {}
+                 colon_on(true), display_blink_state(true),
+                 off_display_start_time(0), showing_off(false) {}
 
-// Clock::init(): Initialize internal variables,
-//                set display to use and buzzer pin
+// Clock::init(): Initialize internal variables, set display to use and buzzer pin
 void Clock::init(TM1637* display, uint8_t buzzer_pin)
 { 
     this->display = display;
@@ -71,12 +74,13 @@ void Clock::init(TM1637* display, uint8_t buzzer_pin)
     this->half_second_counter = 0;
     this->colon_on = true;
     this->display_blink_state = true;
+    this->off_display_start_time = 0;
+    this->showing_off = false;
     
     g_clock_instance = this;
 }
 
-// Clock::set_time(): Set the time hour, minutes and seconds
-//                    to internal binary representation
+// Clock::set_time(): Set the time hour, minutes and seconds to internal binary representation
 void Clock::set_time(uint8_t hour, uint8_t minutes, uint8_t seconds)
 {
     current_time = ((uint32_t)hour << HOUR_SHIFT) | 
@@ -84,8 +88,7 @@ void Clock::set_time(uint8_t hour, uint8_t minutes, uint8_t seconds)
                    ((uint32_t)seconds << SEC_SHIFT);
 }
 
-// Clock::set_alarm(): Set the alarm hour, minutes and seconds
-//                     to internal binary representation
+// Clock::set_alarm(): Set the alarm hour and minutes to internal binary representation
 void Clock::set_alarm(uint8_t hour, uint8_t minutes)
 {
     alarm_time = ((uint32_t)hour << HOUR_SHIFT) | 
@@ -93,7 +96,6 @@ void Clock::set_alarm(uint8_t hour, uint8_t minutes)
 }
 
 // Clock::button_pressed(): Tell the internal clock that a button was pressed
-//                        type: The button that was pressed
 void Clock::button_pressed(ButtonType type) 
 {
     if (alarm_ringing && type == BUTTON_OK) {
@@ -111,7 +113,18 @@ void Clock::button_pressed(ButtonType type)
     
     switch (type) {
         case BUTTON_MENU:
-            menu_state = (MenuState)((menu_state + 1) % 5);
+            // SHOW_TIME -> SHOW_SET -> SHOW_AL -> SHOW_TIME
+            if (menu_state == MENU_SHOW_TIME) {
+                menu_state = MENU_SHOW_SET;
+            } else if (menu_state == MENU_SHOW_SET) {
+                menu_state = MENU_SHOW_AL;
+            } else if (menu_state == MENU_SHOW_AL) {
+                menu_state = MENU_SHOW_TIME;
+            } else {
+                // If in any setting mode, go back to showing time
+                menu_state = MENU_SHOW_TIME;
+            }
+            showing_off = false;
             break;
             
         case BUTTON_PLUS:
@@ -147,7 +160,26 @@ void Clock::button_pressed(ButtonType type)
             break;
             
         case BUTTON_OK:
-            menu_state = MENU_SHOW_TIME;
+            if (menu_state == MENU_SHOW_SET) {
+                menu_state = MENU_SET_HOUR;
+            } else if (menu_state == MENU_SET_HOUR) {
+                menu_state = MENU_SET_MIN;
+            } else if (menu_state == MENU_SET_MIN) {
+                menu_state = MENU_SHOW_TIME;
+            } else if (menu_state == MENU_SHOW_AL) {
+                if (alarm_enabled) {
+                    menu_state = MENU_SET_ALARM_HOUR;
+                } else {
+                    showing_off = true;
+                    off_display_start_time = millis();
+                }
+            } else if (menu_state == MENU_SET_ALARM_HOUR) {
+                menu_state = MENU_SET_ALARM_MIN;
+            } else if (menu_state == MENU_SET_ALARM_MIN) {
+                menu_state = MENU_SHOW_TIME;
+            } else {
+                menu_state = MENU_SHOW_TIME;
+            }
             break;
     }
     
@@ -170,11 +202,16 @@ void Clock::show()
 {
     if (!display) return;
     
+    if (showing_off) {
+        if (millis() - off_display_start_time >= OFF_DISPLAY_TIME) {
+            showing_off = false;
+            menu_state = MENU_SHOW_TIME;
+        }
+    }
+    
     uint8_t hour, min;
     
     if (alarm_ringing) {
-        display_blink_state = !display_blink_state;
-        
         if (display_blink_state) {
             hour = (current_time & HOUR_MASK) >> HOUR_SHIFT;
             min = (current_time & MIN_MASK) >> MIN_SHIFT;
@@ -190,51 +227,114 @@ void Clock::show()
         return;
     }
     
+    if (showing_off) {
+        display->display(0, 0x7f);
+        display->display(1, '0');
+        display->display(2, 'F');
+        display->display(3, 'F');
+        display->point(false);
+        return;
+    }
+    
     switch (menu_state) {
         case MENU_SHOW_TIME:
             hour = (current_time & HOUR_MASK) >> HOUR_SHIFT;
             min = (current_time & MIN_MASK) >> MIN_SHIFT;
             
-            // Display hours on digits 0 and 1
             display->display(0, hour / 10);
             display->display(1, hour % 10);
-            
             display->display(2, min / 10);
             display->display(3, min % 10);
             
             display->point(colon_on);
             break;
             
+        case MENU_SHOW_SET:
+            // Set hour mode
+            display->display(0, 'S');
+            display->display(1, 'E');
+            display->display(2, 't');
+            display->display(3, 0x7f); 
+            display->point(false);
+            break;
+            
+        case MENU_SHOW_AL:
+            // Alarm mode
+            display->display(0, 'A');
+            display->display(1, 'L');
+            display->display(2, 0x7f);
+            display->display(3, 0x7f);
+            display->point(false);
+            break;
+            
         case MENU_SET_HOUR:
+            hour = (current_time & HOUR_MASK) >> HOUR_SHIFT;
+            min = (current_time & MIN_MASK) >> MIN_SHIFT;
+            
+            if (display_blink_state) {
+                display->display(0, hour / 10);
+                display->display(1, hour % 10);
+            } else {
+                display->display(0, 0x7f);
+                display->display(1, 0x7f);
+            }
+            
+            display->display(2, min / 10);
+            display->display(3, min % 10);
+            display->point(true);
+            break;
+            
         case MENU_SET_MIN:
             hour = (current_time & HOUR_MASK) >> HOUR_SHIFT;
             min = (current_time & MIN_MASK) >> MIN_SHIFT;
             
             display->display(0, hour / 10);
             display->display(1, hour % 10);
+            
+            if (display_blink_state) {
+                display->display(2, min / 10);
+                display->display(3, min % 10);
+            } else {
+                display->display(2, 0x7f);
+                display->display(3, 0x7f);
+            }
+            
+            display->point(true);
+            break;
+            
+        case MENU_SET_ALARM_HOUR:
+            hour = (alarm_time & HOUR_MASK) >> HOUR_SHIFT;
+            min = (alarm_time & MIN_MASK) >> MIN_SHIFT;
+            
+            if (display_blink_state) {
+                display->display(0, hour / 10);
+                display->display(1, hour % 10);
+            } else {
+                display->display(0, 0x7f);
+                display->display(1, 0x7f);
+            }
+            
             display->display(2, min / 10);
             display->display(3, min % 10);
             display->point(true);
             break;
             
-        case MENU_SET_ALARM_HOUR:
         case MENU_SET_ALARM_MIN:
-            if (!alarm_enabled) {
-                display->display(0, 0x7f);
-                display->display(1, 0);
-                display->display(2, 'F');
-                display->display(3, 'F');
-                display->point(false);
-            } else {
-                hour = (alarm_time & HOUR_MASK) >> HOUR_SHIFT;
-                min = (alarm_time & MIN_MASK) >> MIN_SHIFT;
-                
-                display->display(0, hour / 10);
-                display->display(1, hour % 10);
+            hour = (alarm_time & HOUR_MASK) >> HOUR_SHIFT;
+            min = (alarm_time & MIN_MASK) >> MIN_SHIFT;
+            
+            display->display(0, hour / 10);
+            display->display(1, hour % 10);
+            
+            if (display_blink_state) {
                 display->display(2, min / 10);
                 display->display(3, min % 10);
-                display->point(true);
+            } else {
+                display->display(2, 0x7f);
+                display->display(3, 0x7f);
             }
+            
+            display->point(true);
             break;
     }
 }
@@ -255,11 +355,12 @@ void Clock::check_alarm()
         current_min == alarm_min && current_sec == 0) {
         alarm_ringing = true;
         alarm_start_time = millis();
-        alarm_tone.play();
         display_blink_state = true;
     }
     
     if (alarm_ringing) {
+        alarm_tone.play();
+        
         if (millis() - alarm_start_time >= 30000) {
             alarm_ringing = false;
             alarm_tone.stop();
@@ -269,13 +370,10 @@ void Clock::check_alarm()
 }
 
 // Clock::run(): Start running the clock
-//               This function MUST not block, everything should be handled
-//               by interrupts
 void Clock::run()
 {
     timer = timerBegin(1000000);
     
     timerAttachInterrupt(timer, &update_time);
-    
     timerAlarm(timer, 500000, true, 0);
 }
