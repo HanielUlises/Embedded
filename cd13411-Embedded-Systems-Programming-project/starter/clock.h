@@ -52,6 +52,9 @@ private:
     // Timer counters
     uint8_t half_second_counter;
     bool colon_on;
+    
+    // Display blink state for alarm
+    bool display_blink_state;
 
 public:
     // Constructor
@@ -75,10 +78,7 @@ public:
     void show();
     void run();
 
-    uint8_t half_second_counter_public;
-    bool colon_on_public;
-    
-    friend void update_time(void* clock);
+    friend void update_time();
 };
 
 #endif

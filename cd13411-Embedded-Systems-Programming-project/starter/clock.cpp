@@ -8,11 +8,15 @@
 #define MIN_SHIFT   6
 #define SEC_SHIFT   0
 
+Clock* g_clock_instance = nullptr;
+
 // Static function: Update time, show things on display
 //                  and check alarm trigger
-void IRAM_ATTR update_time(void* clock)
+void IRAM_ATTR update_time()
 {
-    Clock* clk = (Clock*)clock;
+    if (!g_clock_instance) return;
+    
+    Clock* clk = g_clock_instance;
     
     clk->half_second_counter++;
     clk->colon_on = !clk->colon_on;
@@ -46,28 +50,11 @@ void IRAM_ATTR update_time(void* clock)
     clk->check_alarm();
 }
 
-// Wrapper function for timer interrupt (new ESP32 API requires void(void))
-void IRAM_ATTR onTimer()
-{
-    // This will be set up to call update_time with the clock instance
-}
-
-// Global pointer for ISR access
-Clock* g_clock_instance = nullptr;
-
-void IRAM_ATTR timerISR()
-{
-    if (g_clock_instance) {
-        update_time(g_clock_instance);
-    }
-}
-
-// Empty constructor
 Clock::Clock() : display(nullptr), timer(nullptr), buzzer_pin(0), 
                  current_time(0), alarm_time(0), alarm_enabled(false),
                  alarm_ringing(false), alarm_start_time(0), 
                  menu_state(MENU_SHOW_TIME), half_second_counter(0),
-                 colon_on(true) {}
+                 colon_on(true), display_blink_state(true) {}
 
 // Clock::init(): Initialize internal variables,
 //                set display to use and buzzer pin
@@ -83,8 +70,8 @@ void Clock::init(TM1637* display, uint8_t buzzer_pin)
     this->menu_state = MENU_SHOW_TIME;
     this->half_second_counter = 0;
     this->colon_on = true;
+    this->display_blink_state = true;
     
-    // Set global instance for ISR
     g_clock_instance = this;
 }
 
@@ -113,6 +100,7 @@ void Clock::button_pressed(ButtonType type)
         alarm_ringing = false;
         alarm_tone.stop();
         menu_state = MENU_SHOW_TIME;
+        display_blink_state = true;
         return;
     }
     
@@ -162,21 +150,45 @@ void Clock::button_pressed(ButtonType type)
             menu_state = MENU_SHOW_TIME;
             break;
     }
+    
+    show();
 }
 
 // Clock::turn_alarm(): Enable or disable alarm
 void Clock::turn_alarm(bool on_off)
 {
     alarm_enabled = on_off;
+    if (!on_off && alarm_ringing) {
+        alarm_ringing = false;
+        alarm_tone.stop();
+        display_blink_state = true;
+    }
 }
 
-// Clock::show(): Show time or menu on display
 // Clock::show(): Show time or menu on display
 void Clock::show()
 {
     if (!display) return;
     
     uint8_t hour, min;
+    
+    if (alarm_ringing) {
+        display_blink_state = !display_blink_state;
+        
+        if (display_blink_state) {
+            hour = (current_time & HOUR_MASK) >> HOUR_SHIFT;
+            min = (current_time & MIN_MASK) >> MIN_SHIFT;
+            
+            display->display(0, hour / 10);
+            display->display(1, hour % 10);
+            display->display(2, min / 10);
+            display->display(3, min % 10);
+            display->point(true);
+        } else {
+            display->clearDisplay();
+        }
+        return;
+    }
     
     switch (menu_state) {
         case MENU_SHOW_TIME:
@@ -187,11 +199,9 @@ void Clock::show()
             display->display(0, hour / 10);
             display->display(1, hour % 10);
             
-            // Display minutes on digits 2 and 3
             display->display(2, min / 10);
             display->display(3, min % 10);
             
-            // Toggle colon
             display->point(colon_on);
             break;
             
@@ -209,14 +219,22 @@ void Clock::show()
             
         case MENU_SET_ALARM_HOUR:
         case MENU_SET_ALARM_MIN:
-            hour = (alarm_time & HOUR_MASK) >> HOUR_SHIFT;
-            min = (alarm_time & MIN_MASK) >> MIN_SHIFT;
-            
-            display->display(0, hour / 10);
-            display->display(1, hour % 10);
-            display->display(2, min / 10);
-            display->display(3, min % 10);
-            display->point(true);
+            if (!alarm_enabled) {
+                display->display(0, 0x7f);
+                display->display(1, 0);
+                display->display(2, 'F');
+                display->display(3, 'F');
+                display->point(false);
+            } else {
+                hour = (alarm_time & HOUR_MASK) >> HOUR_SHIFT;
+                min = (alarm_time & MIN_MASK) >> MIN_SHIFT;
+                
+                display->display(0, hour / 10);
+                display->display(1, hour % 10);
+                display->display(2, min / 10);
+                display->display(3, min % 10);
+                display->point(true);
+            }
             break;
     }
 }
@@ -238,12 +256,14 @@ void Clock::check_alarm()
         alarm_ringing = true;
         alarm_start_time = millis();
         alarm_tone.play();
+        display_blink_state = true;
     }
     
     if (alarm_ringing) {
         if (millis() - alarm_start_time >= 30000) {
             alarm_ringing = false;
             alarm_tone.stop();
+            display_blink_state = true;
         }
     }
 }
@@ -253,10 +273,9 @@ void Clock::check_alarm()
 //               by interrupts
 void Clock::run()
 {
-    // New ESP32 Arduino Core 3.x timer API
-    timer = timerBegin(1000000); // 1MHz (1 tick = 1 microsecond)
+    timer = timerBegin(1000000);
     
-    timerAttachInterrupt(timer, &timerISR);
+    timerAttachInterrupt(timer, &update_time);
     
-    timerAlarm(timer, 500000, true, 0); // 500000 microseconds = 0.5 seconds, repeat
+    timerAlarm(timer, 500000, true, 0);
 }
