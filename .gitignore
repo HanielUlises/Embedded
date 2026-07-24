@@ -33,3 +33,27 @@ Thumbs.db
 *.log
 *.tmp
 *.swp
+
+# ESP-IDF
+sdkconfig.old
+dependencies.lock
+managed_components/
+.espressif/
+
+# ESP-IDF build artifacts
+build/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# STM32CubeIDE / Eclipse metadata (never commit this)
+STM32/.metadata/
+
+# Large datasheets / PDFs you don't need in the repo
+*.pdf
+!STM32/F401_Pulse/**/*.pdf   # optional: keep only project-related ones if you want
+
+# Zip libraries
+*.zip
