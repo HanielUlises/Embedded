@@ -1,22 +1,46 @@
-# Ignore the entire build directory (recommended approach)
+# === Build directories (anywhere) ===
 build/
 Debug/
 Release/
+**/build/
+**/Debug/
+**/Release/
 
-# Object files, dependency files, and linker outputs
+# Object files, static libs, dependency files
 *.o
 *.obj
+*.a
 *.d
 *.map
+*.su
 
-# Executables/Firmware specific to embedded systems
+# Executables / firmware
 *.elf
 *.hex
 *.bin
 *.srec
+*.img
 
-# IDE and Editor-specific files
+# ESP-IDF specific
+sdkconfig.old
+dependencies.lock
+managed_components/
+.espressif/
+sdkconfig
+!sdkconfig.defaults          # keep defaults if you have them
+
+# CMake / Ninja
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+*.ninja
+.ninja_deps
+.ninja_log
+
+# IDE / editor
 .vscode/
+.idea/
 .eclipse/
 *.uvproj*
 *.ewp
@@ -24,12 +48,26 @@ Release/
 *.suo
 *.user
 *.ncb
+.pio/
+.pioenvs/
+.piolibdeps/
 
-# OS generated files
+# OS junk
 .DS_Store
 Thumbs.db
+*~
 
-# Temporary and log files
+# Temporary / logs
 *.log
 *.tmp
 *.swp
+*.swo
+
+# STM32CubeIDE metadata
+STM32/.metadata/
+
+# Large tutorial dumps & datasheets
+ESP32/Freenove_ESP32_WROVER_Board-main/
+*.pdf
+*.zip
+!**/README.md
