@@ -8,7 +8,7 @@
 void systick_delayMs(int delay) {
 	// Configure systick
 	// reload with number of clocks per ms
-	SysTick -> LOPAD = SYSTICK_LOAD_VAL;
+	SysTick -> LOAD = SYSTICK_LOAD_VAL;
 	// Clear systick current value register
 	SysTick -> VAL = 0;
 	// Enable systick and select internal clock source
