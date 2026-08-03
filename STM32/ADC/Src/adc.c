@@ -8,6 +8,7 @@
 #define CR2_ADON			(1U << 0)
 #define CR2_SWSTART			(1U << 30)
 #define SR_EOC				(1U << 1)
+#define CR2_CONT			(1U << 1)
 
 void pa1_adc_init(void) {
 	// Configure the ADC GPIO pin
@@ -31,6 +32,8 @@ void pa1_adc_init(void) {
 }
 
 void start_conversion(void) {
+	// Continuous conversion
+	ADC1 -> CR2 |= CR2_CONT;
 	// Start ADC conversion
 	ADC1 -> CR2 |= CR2_SWSTART;
 }
