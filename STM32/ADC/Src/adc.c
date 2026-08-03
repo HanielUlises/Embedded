@@ -13,7 +13,7 @@ void pa1_adc_init(void) {
 	// Configure the ADC GPIO pin
 
 	// Enable clock access to GPIOA
-	RCC -> AH1BENR |= GPIOAEN;
+	RCC -> AHB1ENR |= GPIOAEN;
 	// Set the mode of PA1 to analog
 	GPIOA -> MODER |= (1U << 2);
 	GPIOA -> MODER |= (1U << 3);
@@ -32,7 +32,7 @@ void pa1_adc_init(void) {
 
 void start_conversion(void) {
 	// Start ADC conversion
-	ADC1 -> CR2 |= CR2_SWAS;
+	ADC1 -> CR2 |= CR2_SWSTART;
 }
 
 uint32_t adc_read(void) {

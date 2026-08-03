@@ -30,7 +30,37 @@ void uart2_write(int ch) {
 	USART2 -> DR = (ch & 0xFF);
 }
 
-void uart2_trxx_init(void) {
+void uart2_tx_init(void)
+{
+    /************ Configure PA2 as UART2_TX ************/
+
+    /* Enable clock access to GPIOA */
+    RCC->AHB1ENR |= GPIOAEN;
+
+    /* Set PA2 to Alternate Function mode */
+    GPIOA->MODER &= ~(3U << 4);
+    GPIOA->MODER |=  (2U << 4);
+
+    /* Select AF7 (USART2_TX) for PA2 */
+    GPIOA->AFR[0] &= ~(0xFU << 8);
+    GPIOA->AFR[0] |=  (7U << 8);
+
+    /************ Configure USART2 ************/
+
+    /* Enable clock access to USART2 */
+    RCC->APB1ENR |= UART2EN;
+
+    /* Configure baud rate */
+    uart_set_baudrate(USART2, APB1_CLK, UART_BAUDRATE);
+
+    /* Enable transmitter only */
+    USART2->CR1 = CR1_TE;
+
+    /* Enable USART2 */
+    USART2->CR1 |= CR1_UE;
+}
+
+void uart2_rxtx_init(void) {
 	/************Configure uart gpio pin*************/
 	// Enable clock access to gpioa
 	RCC -> AHB1ENR |= GPIOAEN;
@@ -68,7 +98,7 @@ void uart2_trxx_init(void) {
 char uart2_read(void) {
 	// Make sure the receive data register is not empty
 	while(!(USART2 -> SR & SR_RXNE)) {}
-	return USART -> DR;
+	return USART2 -> DR;
 }
 
 int __io_putchar(int ch) {

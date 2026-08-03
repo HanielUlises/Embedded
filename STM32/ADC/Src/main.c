@@ -3,26 +3,17 @@
 #include "uart.h"
 #include "adc.h"
 
-#define GIPOAEN 		(1U << 0)
-#define GPIOA_5			(1U << 5)
-
-#define LED_PIN			GPIOA_5
-
-char key;
+uint32_t sensor_value;
 
 int main(void) {
-	// Enable clock access to GPIOA
-	RCC -> AHB1ENR |= GPIOAEN;
-	// Set PA5 as output pin
-	GPIOA -> MODER |= (1U<<10);
-	GPIOA -> MODER &= ~(1U<<10);
-	uart2_rxtx_init();
+
+
+	uart2_tx_init();
+	pa1_adc_init();
+
 	while(1) {
-		key = uart2_read();
-		if(key == '1') {
-				GPIOA -> ODR |= LED_PIN;
-		} else {
-			GPIO -> ODR &= ~LED_PIN;
-		}
+		start_conversion();
+		sensor_value = adc_read();
+		printf("Sensor value: %li \n\r", sensor_value);
 	}
 }
