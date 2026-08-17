@@ -3,6 +3,7 @@
 #include "uart.h"
 #include "adc.h"
 #include "systick.h"
+#include "tim.h"
 
 uint32_t sensor_value;
 
@@ -17,9 +18,15 @@ int main(void) {
 	GPIOA -> MODER &=~ (1U << 11);
 
 	uart2_tx_init();
+	tim2_1hz_init();
 
 	while(1) {
+		// Wait for UIF
+		while(!(TIM2 -> SR & SR_UIF)) {}
+
+		TIM2 -> SR &= ~SR_UIF;
 		printf("[Log| A second passed]");
+		GPIOA -> ODR ^= LED_PIN;
 		systick_delayMs(1000);
 	}
 }
