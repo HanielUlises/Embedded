@@ -7,7 +7,10 @@
 #include "signals.h"
 
 extern float _5hz_signal[HZ_5_SIG_LEN];
+float g_input_sig_sample;
 
+static void plot_input_signal(void);
+static void pseudo_delay(int dly);
 
 int main(void) {
 	// Full access in CPACR to enable CP10 and CP11 (20-23)
@@ -19,6 +22,17 @@ int main(void) {
 	SCB -> CPACR |= (1U << 23);
 
 	while(1) {
-
+		plot_input_signal();
 	}
+}
+
+static void plot_input_signal(void) {
+	int i;
+	for(i = 0; i < HZ_5_SIG_LEN; i++) {
+		g_input_sig_sample = _5hz_signal[i];
+	}
+}
+
+static void pseudo_delay(int dly) {
+	for(int i = 0; i < dly; i++) {}
 }
