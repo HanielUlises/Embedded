@@ -13,17 +13,22 @@ static void plot_input_signal(void);
 static void pseudo_delay(int dly);
 
 int main(void) {
+	uart2_tx_init();
+
+	while(1) {
+		plot_input_signal();
+	}
+}
+
+static void fpu_enable(void) {
 	// Full access in CPACR to enable CP10 and CP11 (20-23)
 	SCB -> CPACR |= ((3UL << 10 * 2) | (3UL << 11 * 2));
-
+	// Enable floating point unit from CP10 and CP11 with full access
 	SCB -> CPACR |= (1U << 20);
 	SCB -> CPACR |= (1U << 21);
 	SCB -> CPACR |= (1U << 22);
 	SCB -> CPACR |= (1U << 23);
 
-	while(1) {
-		plot_input_signal();
-	}
 }
 
 static void plot_input_signal(void) {
