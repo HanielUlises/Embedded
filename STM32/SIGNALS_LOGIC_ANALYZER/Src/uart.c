@@ -38,13 +38,15 @@ void uart2_tx_init(void)
     RCC->AHB1ENR |= GPIOAEN;
 
     /* Set PA2 to Alternate Function mode */
-    GPIOA->MODER &= ~(3U << 4);
-    GPIOA->MODER |=  (2U << 4);
+    GPIOA->MODER &= ~(1U << 4);
+    GPIOA->MODER |=  (1U << 5);
 
-    /* Select AF7 (USART2_TX) for PA2 */
-    GPIOA->AFR[0] &= ~(0xFU << 8);
-    GPIOA->AFR[0] |=  (7U << 8);
+    /* Set PA2 alternate function type to UART_TX(AF07) */
 
+    GPIOA->AFR[0] |=  (1U << 8);
+    GPIOA->AFR[0] |=  (1U << 9);
+    GPIOA->AFR[0] |=  (1U << 10);
+    GPIOA->AFR[0] &= ~(1U << 11);
     /************ Configure USART2 ************/
 
     /* Enable clock access to USART2 */
