@@ -11,8 +11,10 @@ float g_input_sig_sample;
 
 static void plot_input_signal(void);
 static void pseudo_delay(int dly);
+static void fpu_enable(void);
 
 int main(void) {
+	fpu_enable();
 	uart2_tx_init();
 
 	while(1) {
