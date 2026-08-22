@@ -1,4 +1,5 @@
 #include "signals.h"
+#include "arm_math.h"
 
 #include <stdint.h>
 

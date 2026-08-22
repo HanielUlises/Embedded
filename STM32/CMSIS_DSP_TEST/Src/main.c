@@ -14,13 +14,15 @@ float g_input_sig_sample;
 static void plot_input_signal(void);
 static void pseudo_delay(int dly);
 static void fpu_enable(void);
+static void serial_plot_input(void);
 
 int main(void) {
 	fpu_enable();
 	uart2_tx_init();
 
 	while(1) {
-		plot_input_signal();
+//		plot_input_signal();	// SWV Data Trace: watch g_input_sig_sample
+		serial_plot_input();	// UART: stream samples as ASCII for a serial plotter
 	}
 }
 
@@ -48,7 +50,10 @@ static void plot_input_signal(void) {
 }
 
 static void serial_plot_input(void) {
-
+	for (int i = 0; i < KHZ1_15_SIG_LEN; i++) {
+		printf("%.6f\r\n", input_signal_f32_1kHz_15kHz[i]);
+		pseudo_delay(9000);
+	}
 }
 
 static void pseudo_delay(int dly) {
