@@ -5,8 +5,10 @@
 #include "systick.h"
 #include "tim.h"
 #include "signals.h"
+#include "arm_math.h"
 
 extern float _5hz_signal[HZ_5_SIG_LEN];
+extern float32_t input_signal_f32_1kHz_15kHz[KHZ1_15_SIG_LEN];
 float g_input_sig_sample;
 
 static void plot_input_signal(void);
@@ -35,9 +37,18 @@ static void fpu_enable(void) {
 
 static void plot_input_signal(void) {
 	int i;
-	for(i = 0; i < HZ_5_SIG_LEN; i++) {
-		g_input_sig_sample = _5hz_signal[i];
+//	for(i = 0; i < HZ_5_SIG_LEN; i++) {
+//		g_input_sig_sample = _5hz_signal[i];
+//	}
+
+	for(i = 0; i < KHZ1_15_SIG_LEN; i++) {
+		g_input_sig_sample = input_signal_f32_1kHz_15kHz[i];
+		pseudo_delay(9000);
 	}
+}
+
+static void serial_plot_input(void) {
+
 }
 
 static void pseudo_delay(int dly) {
