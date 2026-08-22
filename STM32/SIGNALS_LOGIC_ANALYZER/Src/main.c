@@ -17,8 +17,13 @@ int main(void) {
 	fpu_enable();
 	uart2_tx_init();
 
+	int i;
 	while(1) {
-		plot_input_signal();
+
+		for(i = 0; i < HZ_5_SIG_LEN; i++) {
+			printf("%f \r\n",_5hz_signal[i]);
+		}
+	}
 	}
 }
 
@@ -34,11 +39,7 @@ static void fpu_enable(void) {
 }
 
 static void plot_input_signal(void) {
-	int i;
-	for(i = 0; i < HZ_5_SIG_LEN; i++) {
-		g_input_sig_sample = _5hz_signal[i];
-	}
-}
+
 
 static void pseudo_delay(int dly) {
 	for(int i = 0; i < dly; i++) {}
