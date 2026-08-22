@@ -1,0 +1,7 @@
+#ifndef SIGNALS_H
+#define SIGNALS_H
+
+#define HZ_5_SIG_LEN 			301
+#define KHZ1_15_SIG_LEN			320
+
+#endif

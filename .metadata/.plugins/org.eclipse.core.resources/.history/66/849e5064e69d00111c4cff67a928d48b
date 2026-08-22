@@ -1,0 +1,5 @@
+../Src/main.c:19:5:main	1
+../Src/main.c:29:13:fpu_enable	1
+../Src/main.c:40:13:plot_input_signal	2
+../Src/main.c:52:13:serial_plot_input	2
+../Src/main.c:59:13:pseudo_delay	2

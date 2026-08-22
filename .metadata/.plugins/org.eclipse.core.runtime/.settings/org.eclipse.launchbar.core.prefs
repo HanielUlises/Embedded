@@ -1,0 +1,7 @@
+LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/arch=x86_64
+LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/name=Local
+LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/os=linux
+configDescList=org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:CMSIS_DSP_TEST Debug,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:GPTD Debug,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:ADC Debug,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:SYSTICK_DELAY Debug,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:UART_TX Debug,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:F401_GPIO Debug,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:F401_Pulse Debug
+eclipse.preferences.version=1
+org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:ADC\ Debug/activeLaunchMode=run
+org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:ADC\ Debug/activeLaunchTarget=null\:---
