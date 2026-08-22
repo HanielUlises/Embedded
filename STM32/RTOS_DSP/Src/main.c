@@ -18,13 +18,33 @@ static void pseudo_delay(int dly);
 static void fpu_enable(void);
 static void serial_plot_input(void);
 
+uint32_t task1_profiler, task2_profiler;
+
+void task1(void *pvParameters);
+void task2(void *pvParameters);
+
 int main(void) {
 	fpu_enable();
 	uart2_tx_init();
 
+	xTaskCreate(task1, "Task1", 100, NULL, 2, NULL);
+	xTaskCreate(task2, "Task2", 100, NULL, 1, NULL);
+
 	while(1) {
 //		plot_input_signal();	// SWV Data Trace: watch g_input_sig_sample
 		serial_plot_input();	// UART: stream samples as ASCII for a serial plotter
+	}
+}
+
+void task1(void *pvParameters) {
+	while(1) {
+		task1_profiler++;
+	}
+}
+
+void task2(void *pvParameters) {
+	while(1) {
+		task2_profiler++;
 	}
 }
 
