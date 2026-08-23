@@ -21,7 +21,7 @@ int main(void) {
 
 	while(1) {
 		// Wait until edge is captured
-		while(!(TIM3 -> SR  & SR_CC1IF)) {}
+		while(!(TIM3 -> SR  & SR_CC11F)) {}
 		// Read captured value
 		timestamp = TIM3 -> CCR1;
 	}
