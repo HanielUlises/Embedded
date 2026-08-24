@@ -12,4 +12,6 @@
 
 void pc13_exti_init(void);
 
+#define LINE13				(1U << 13)
+
 #endif /* EXTI_H_ */

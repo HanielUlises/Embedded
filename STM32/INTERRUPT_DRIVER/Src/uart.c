@@ -8,7 +8,8 @@
 
 #define CR1_UE			(1U << 13)
 #define SR_TXE			(1U << 7)
-#define SR_RXNE			(1U << 7)
+#define SR_RXNE			(1U << 5)
+#define CR1_RXNEIE		(1U << 5)
 
 #define SYS_FREQ		16000000
 #define APB1_CLK		SYS_FREQ
@@ -30,8 +31,7 @@ void uart2_write(int ch) {
 	USART2 -> DR = (ch & 0xFF);
 }
 
-void uart2_tx_init(void)
-{
+void uart2_tx_init(void) {
     /************ Configure PA2 as UART2_TX ************/
 
     /* Enable clock access to GPIOA */
@@ -60,7 +60,7 @@ void uart2_tx_init(void)
     USART2->CR1 |= CR1_UE;
 }
 
-void uart2_rxtx_init(void) {
+void uart2_rxtx_interrupt_init(void) {
 	/************Configure uart gpio pin*************/
 	// Enable clock access to gpioa
 	RCC -> AHB1ENR |= GPIOAEN;
@@ -91,6 +91,10 @@ void uart2_rxtx_init(void) {
 	uart_set_baudrate(USART2, APB1_CLK, UART_BAUDRATE);
 	// Configure the transfer direction
 	USART2 -> CR1 = (CR1_TE | CR1_RE);
+	// Enable RXNE interrupt
+	USART2 -> CR1 |= CRCR1_RXNEIE;
+	// Enable UART interrupt in NVIC
+	NVIC_EnaleIRQ(USART2_IRQn);
 	// Enable uart module
 	USART2 -> CR1 |= CR1_UE;
 }

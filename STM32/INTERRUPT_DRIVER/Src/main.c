@@ -4,45 +4,39 @@
 #include "adc.h"
 #include "systick.h"
 #include "tim.h"
+#include "exti.h"
 
 uint32_t sensor_value;
 
-/*
 #define GPIOAEN 				(1U << 0)
 #define PIN5					(1U << 5)
 
-#define LED_PIN					PIN5 */
+#define LED_PIN					PIN5
 
 int timestamp = 0;
 
+static void exti_callback(void);
+
 int main(void) {
-	tim2_pa5_output_compare();
-	tim3_pa6_input_capture();
 
-	while(1) {
-		// Wait until edge is captured
-		while(!(TIM3 -> SR  & SR_CC11F)) {}
-		// Read captured value
-		timestamp = TIM3 -> CCR1;
-	}
-	/*
-	RCC -> AHB1ENR |= GPIOAEN;
-	GPIOA -> MODER |= (1U << 10);
-	GPIOA -> MODER &=~ (1U << 11);
-
+	pc13_exti_init();
 	uart2_tx_init();
-	tim2_1hz_init();
 
 	while(1) {
-		// Wait for UIF
-		while(!(TIM2 -> SR & SR_UIF)) {}
 
-		TIM2 -> SR &= ~SR_UIF;
-		printf("[Log| A second passed]");
-		GPIOA -> ODR ^= LED_PIN;
-		systick_delayMs(1000);
 	}
-	*/
-
 
 }
+
+static void exti_callback(void) {
+	printf("BTN Pressed...\n\r");
+}
+
+void EXTI15_10_IRQHandler(void) {
+	if((EXTI -> PR & LINE13) != 0) {
+		// Clear the PR flag
+		EXTI -> PR |= LINE13;
+		exti_callback();
+	}
+}
+
