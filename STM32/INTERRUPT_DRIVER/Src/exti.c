@@ -9,7 +9,7 @@
 #define GPIOCEN 				(1U << 2)
 #define SYSCFGEN				(1U << 14)
 
-void pc13_exti_init() {
+void pc13_exti_init(void) {
 	// Disable global interrupt
 	__disable_irq();
 	// Enable clock access to GPIOC
@@ -26,7 +26,7 @@ void pc13_exti_init() {
 	// Select falling edge trigger
 	EXTI -> FTSR |= (1U << 13);
 	// Enable EXTI13 line in NVIC
-	NVIC_EnableIRQ(EXTI15_10_Irn);
+	NVIC_EnableIRQ(EXTI15_10_IRQn);
 	// Enable gloabl interrrupts
 
 
