@@ -7,7 +7,9 @@
 #include "exti.h"
 
 // #define UART_INTER_DRIVER
-#define ADC_INTER_DRIVER
+// #define ADC_INTER_DRIVER
+// #define SYSTICK_INTER_DRIVER
+#define TIMER_INTER_DRIVER
 
 uint32_t sensor_value;
 
@@ -21,11 +23,17 @@ uint32_t sensor_value;
 int timestamp = 0;
 char key;
 
-static void exti_callback(void);
-static void uart_callback(void);
 static void adc_callback(void);
+static void exti_callback(void);
+static void systick_callback(void);
+static void uart_callback(void);
 
+
+void ADC_IRQHandler(void);
+void EXTI15_10_IRQHandler(void);
+void SysTick_IRQHandler(void);
 void USART2_IRQHandler(void);
+
 
 
 int main(void) {
@@ -55,8 +63,37 @@ int main(void) {
 
     while (1)
     {
-        sensor_value = adc_read();
-        printf("Sensor value: %d \n\r", (int) sensor_value);
+
+    }
+
+#elif defined(SYSTICK_INTER_DRIVER)
+    // Enable clock access to GPIOA
+    RCC -> APB1ENR |= GPIOAEN;
+
+    // Set PA5 as output pin
+    GPIOA -> MODER |= (1U << 10);
+    GPIOA -> MODER &= ~(1U << 11);
+
+    uart2_tx_init();
+    systick_1hz_interrupt();
+
+    while(1) {
+
+    }
+
+#elif defined(TIMER_INTER_DRIVER)
+    // Enable clock access to GPIOA
+    RCC -> APB1ENR |= GPIOAEN;
+
+    // Set PA5 as output pin
+    GPIOA -> MODER |= (1U << 10);
+    GPIOA -> MODER &= ~(1U << 11);
+
+    uart2_tx_init();
+    tim2_1hz_interrupt_init();
+
+    while(1) {
+
     }
 
 #endif
@@ -64,17 +101,25 @@ int main(void) {
     return 0;
 }
 
+
 static void adc_callback(void) {
 	sensor_value = ADC1 -> DR;
 	printf("Sensor value: %d \n\r", (int) sensor_value);
 }
 
-void ADC_IRQHandler(void) {
-	// Check for EOC in SR
-	if((ADC1 -> SR & SR_EOC) != 0) {
-		// Clear EOC
-		ADC1 -> SR &= ~SR_EOC;
-	}
+static void exti_callback(void) {
+	printf("BTN Pressed...\n\r");
+}
+
+static void systick_callback(void) {
+	printf("A second has passed! \n\r");
+	GPIOA -> ODR ^= LED_PIN;
+	systick_delayMs(1000);
+}
+
+static void tim2_callback(void) {
+	printf("A second has passed\n\r");
+	GPIOA -> ODR ^= LED_PIN;
 }
 
 static void uart_callback(void) {
@@ -86,15 +131,13 @@ static void uart_callback(void) {
 	}
 }
 
-void USART2_IRQHandler(void) {
-	// RXNE set (check)
-	if(USART2 -> SR & SR_RXNE) {
-		uart_callback();
+void ADC_IRQHandler(void) {
+	// Check for EOC in SR
+	if((ADC1 -> SR & SR_EOC) != 0) {
+		// Clear EOC
+		ADC1 -> SR &= ~SR_EOC;
+		adc_callback();
 	}
-}
-
-static void exti_callback(void) {
-	printf("BTN Pressed...\n\r");
 }
 
 void EXTI15_10_IRQHandler(void) {
@@ -104,4 +147,23 @@ void EXTI15_10_IRQHandler(void) {
 		exti_callback();
 	}
 }
+
+void SysTick_IRQHandler(void) {
+	systick_callback();
+}
+
+void TIM2_IRQHandler(void) {
+	// Clear update interrupt flag
+	TIM2 -> SR &= ~SR_UIF;
+
+}
+
+void USART2_IRQHandler(void) {
+	// RXNE set (check)
+	if(USART2 -> SR & SR_RXNE) {
+		uart_callback();
+	}
+}
+
+
 

@@ -13,6 +13,7 @@
 #define GPIOAEN						(1U << 0)
 #define AFR5_TIM 					(1U << 20)
 #define AFR6_TIM					(1U << 25)
+#define DIER_UIE					(1U << 0)
 
 void tim2_1hz_init(void) {
 	// Enable clock access to tim2
@@ -27,6 +28,26 @@ void tim2_1hz_init(void) {
 	// Enable timer
 	TIM2 -> CR1 |= CR1_CEN;
 
+}
+
+void tim2_1hz_interrupt_init(void) {
+	// Enable clock access to tim2
+	RCC -> APB1ENR |= TIM2EN;
+	// Set prescaler value
+	TIM2 -> PSC = 1600 - 1;
+	// Set auto-reload value
+	TIM2 -> ARR = 10000 - 1;
+	// Clear counter
+	TIM2 -> CNT = 0;
+
+	// Enable timer
+	TIM2 -> CR1 |= CR1_CEN;
+
+	// Enable TIM interrupt
+	TIM2 -> DIER |= DIER_UIE;
+
+	// Enable TIM interrupt in NVIC
+	NVIC_EnableIRQ(TIM2_IRQn);
 }
 
 void tim2_pa5_output_compare(void) {
