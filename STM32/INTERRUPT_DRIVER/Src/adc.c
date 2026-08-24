@@ -24,10 +24,10 @@ void pa1_adc_interrupt_init(void) {
 	RCC -> APB2ENR |= ADC1EN;
 
 	// Enable ADC end-of-conversion interrupt
-	ADC -> CR1 |= CR1_EOCIE;
+	ADC1 -> CR1 |= CR1_EOCIE;
 
 	// Enable ADC interrupt in NVIC
-	NVIC_EnableIRQ(ARC_IRQn);
+	NVIC_EnableIRQ(ADC_IRQn);
 
 	// ADC parameters
 	// Configure conversion sequence start
