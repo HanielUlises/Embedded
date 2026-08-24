@@ -55,9 +55,9 @@ void uart2_rx_interrupt_init(void) {
 	// Configure baudrate
 	uart_set_baudrate(USART2, APB1_CLK, UART_BAUDRATE);
 	// Configure the transfer direction transmission and receiver
-	USART -> CR1 |= CR1_RE;
+	USART2 -> CR1 |= CR1_RE;
 	// Enable RXNE interrupt
-	USART -> CR1 |= CR1__RXNEIE;
+	USART2 -> CR1 |= CR1_RXNEIE;
 	// Enable UART2 interrupt in NVIC
 	NVIC_EnableIRQ(USART2_IRQn);
 	// Enable UART module
@@ -126,9 +126,9 @@ void uart2_rxtx_interrupt_init(void) {
 	// Configure the transfer direction
 	USART2 -> CR1 = (CR1_TE | CR1_RE);
 	// Enable RXNE interrupt
-	USART2 -> CR1 |= CRCR1_RXNEIE;
+	USART2 -> CR1 |= CR1_RXNEIE;
 	// Enable UART2 interrupt in NVIC
-	NVIC_EnaleIRQ(USART2_IRQn);
+	NVIC_EnableIRQ(USART2_IRQn);
 	// Enable UART module
 	USART2 -> CR1 |= CR1_UE;
 }

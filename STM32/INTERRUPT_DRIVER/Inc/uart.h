@@ -9,4 +9,6 @@ void uart2_tx_init(void);
 void uart2_rxtx_interrupt_init(void);
 char uart2_read(void);
 
+#define SR_RXNE 			(1U << 5)
+
 #endif

@@ -9,8 +9,9 @@
 #define CR2_SWSTART			(1U << 30)
 #define SR_EOC				(1U << 1)
 #define CR2_CONT			(1U << 1)
+#define CR1_EOCIE			(1U << 5)
 
-void pa1_adc_init(void) {
+void pa1_adc_interrupt_init(void) {
 	// Configure the ADC GPIO pin
 
 	// Enable clock access to GPIOA
@@ -21,6 +22,12 @@ void pa1_adc_init(void) {
 	// Configure ADC module
 	// Enable clock access to ADC
 	RCC -> APB2ENR |= ADC1EN;
+
+	// Enable ADC end-of-conversion interrupt
+	ADC -> CR1 |= CR1_EOCIE;
+
+	// Enable ADC interrupt in NVIC
+	NVIC_EnableIRQ(ARC_IRQn);
 
 	// ADC parameters
 	// Configure conversion sequence start
