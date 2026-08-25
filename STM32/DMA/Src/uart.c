@@ -12,7 +12,6 @@
 #define CR1_RXNEIE				(1U << 5)
 
 #define DMA1EN					(1U << 21)
-#define DMA_S_EN				(1U << 0)
 #define CHSEL4					(1U << 27)
 #define DMA_MEM_INC				(1U << 10)
 #define DMA_DIR_MEM_TO_PERIPH	(1U << 16)
@@ -37,7 +36,10 @@ void dma1_stream6_init(uint32_t src, uint32_t dst, uint32_t len) {
 	// Enable clock access to DMA
 	RCC -> APB1ENR |= DMA1EN;
 	// Disable DMA1 stream6
-	DMA1_Stream6 -> Cr &= ~DMA_S_EN;
+	DMA1_Stream6 -> CR &= ~DMA_CR_EN;
+	// Wait until DMA1 Stream 6 is disabled
+	while(DMA1_Stream6 -> CR &= ~DMA_CR_EN) {}
+
 	// Clear all interrupt flags of stream6
 	DMA1 -> HIFCR |= (1U << 16);
 	DMA1 -> HIFCR |= (1U << 17);

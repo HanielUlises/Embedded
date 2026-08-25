@@ -10,7 +10,7 @@ void uart2_tx_init(void);
 void uart2_rxtx_interrupt_init(void);
 char uart2_read(void);
 
-#define HISR_TCIF			(1U << 21)
+#define HISR_TCIF6			(1U << 21)
 #define SR_RXNE 			(1U << 5)
 #define HIFCR_CTCIF6		(1U << 21)
 

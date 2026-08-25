@@ -47,7 +47,7 @@ static void dma_callback(void) {
 void DMA1_Stream6_IRQHandler(void) {
 	if(DMA1 -> HISR & HISR_TCIF6) {
 		// CLear flag
-		DMA1 -> HIFCR |= HIFCR_CTCFI6;
-		// Do something
+		DMA1 -> HIFCR |= HIFCR_CTCIF6;
+		dma_callback();
 	}
 }
