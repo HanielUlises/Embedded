@@ -6,3 +6,4 @@
  */
 
 void I2C1_init(void);
+void I2C1_byte_read(char saddr, char maddr, char *data);
