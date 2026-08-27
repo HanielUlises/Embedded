@@ -21,7 +21,7 @@ int main(void) {
 		if(key == '1') {
 				GPIOA -> ODR |= LED_PIN;
 		} else {
-			GPIO -> ODR &= ~LED_PIN;
+			GPIOA -> ODR &= ~LED_PIN;
 		}
 	}
 }

@@ -1,8 +1,5 @@
 #include "uart.h"
 
-#define GPIOAEN 		(1U << 0)
-#define UART2EN			(1U << 17)
-
 #define CR1_TE			(1U << 3)
 #define CR1_RE			(1U << 2)
 
@@ -30,7 +27,7 @@ void uart2_write(int ch) {
 	USART2 -> DR = (ch & 0xFF);
 }
 
-void uart2_trxx_init(void) {
+void uart2_rxtx_init(void) {
 	/************Configure uart gpio pin*************/
 	// Enable clock access to gpioa
 	RCC -> AHB1ENR |= GPIOAEN;
@@ -68,7 +65,7 @@ void uart2_trxx_init(void) {
 char uart2_read(void) {
 	// Make sure the receive data register is not empty
 	while(!(USART2 -> SR & SR_RXNE)) {}
-	return USART -> DR;
+	return USART2 -> DR;
 }
 
 int __io_putchar(int ch) {
