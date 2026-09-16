@@ -18,12 +18,54 @@
 #define CR1_STOP					(1U << 9)
 #define SR1_RXNE					(1U << 6)
 #define SR1_BTF						(1U << 2)
+#define SR1_AF						(1U << 10)	/* acknowledge failure */
+
+/* Loops, not microseconds. At 16MHz this is a few tens of ms, which is
+ * ages compared to a 100kHz byte transfer but still quick to fail. */
+#define I2C_TIMEOUT					100000
+
+/* Abort: stop the transfer so the bus is left usable for the next attempt. */
+static int i2c_abort(int err) {
+	I2C1->CR1 |= CR1_STOP;
+	return err;
+}
+
+/* Spin until the flag in SR1 is set, giving up after I2C_TIMEOUT. */
+#define WAIT_SR1(flag, err)										\
+	do {														\
+		unsigned int _t = I2C_TIMEOUT;							\
+		while(!(I2C1->SR1 & (flag))) {							\
+			if(--_t == 0U) { return i2c_abort(err); }			\
+		}														\
+	} while(0)
+
+/* The addr phase is the one that detects a missing device: a NACK sets AF
+ * instead of ADDR, so watch both or a dead slave just burns the timeout. */
+#define WAIT_ADDR()												\
+	do {														\
+		unsigned int _t = I2C_TIMEOUT;							\
+		while(!(I2C1->SR1 & SR1_ADDR)) {						\
+			if(I2C1->SR1 & SR1_AF) {							\
+				I2C1->SR1 &= ~SR1_AF;							\
+				return i2c_abort(I2C_ERR_NACK);					\
+			}													\
+			if(--_t == 0U) { return i2c_abort(I2C_ERR_ADDR); }	\
+		}														\
+	} while(0)
+
+#define WAIT_NOT_BUSY()											\
+	do {														\
+		unsigned int _t = I2C_TIMEOUT;							\
+		while(I2C1->SR2 & SR2_BUSY) {							\
+			if(--_t == 0U) { return I2C_ERR_BUSY; }				\
+		}														\
+	} while(0)
 
 // PB8 ------ SCL
 // PB9 ------ SDA
 
 void I2C1_init(void) {
-	// Enable clock access to IC2C1
+	// Enable clock access to GPIOB
 	RCC -> AHB1ENR |= GPIOBEN;
 	// Set PB8 and PB9 mode to alternate function
 	GPIOB -> MODER &= ~(1U << 16);
@@ -74,97 +116,106 @@ void I2C1_init(void) {
 	I2C1 -> CR1 |= CR1_PE;
 }
 
-void I2C1_byte_read(char saddr, char maddr, char *data) {
+int I2C1_byte_read(char saddr, char maddr, char *data) {
 	volatile int temp;
 	// Wait until bus not busy
-	while(I2C1 -> SR2 & (SR2_BUSY)) {}
+	WAIT_NOT_BUSY();
 
 	// Generate start
 	I2C1 -> CR1 |= CR1_START;
 
 	// wait until start flag is set
-	while(!(I2C1 -> SR1 & (SR1_SB))) {}
+	WAIT_SR1(SR1_SB, I2C_ERR_START);
 
 	// transmit slave address + write
 	I2C1 -> DR = saddr << 1;
 
 	// Wait until addr flag is set
-	while(!(I2C1 -> SR1 & (SR1_ADDR))) {}
+	WAIT_ADDR();
 
 	// Clear addr flag
 	temp = I2C1 -> SR2;
+	(void) temp;
+
+	// Wait until transmitter empty
+	WAIT_SR1(SR1_TXE, I2C_ERR_TXE);
 
 	// Send memory address
 	I2C1 -> DR = maddr;
 
 	// Wait until transmitter empty
-	while(!(I2C1 -> SR1 & SR1_TXE)) {}
+	WAIT_SR1(SR1_TXE, I2C_ERR_TXE);
 
 	// Generate restart
 	I2C1 -> CR1 |= CR1_START;
 
 	// Wait until start flag is set
-	while(!(I2C1 -> SR1 & SR1_SB)) {}
+	WAIT_SR1(SR1_SB, I2C_ERR_START);
 
 	// Transmit slave address + read
 	I2C1 -> DR = saddr << 1 | 1;
 
 	// Wait until addr flag is set
-	while(!(I2C1 -> SR1 & (SR1_ADDR))) {}
+	WAIT_ADDR();
 
 	// Disable acknowledge
 	I2C1 -> CR1 &= ~CR1_ACK;
 
 	// Clear address
 	temp = I2C1 -> SR2;
+	(void) temp;
 
 	// Generate stop after data received
 	I2C1 -> CR1 |= CR1_STOP;
 
 	// Wait until RXNE flag is set
-	while(!(I2C1 -> SR1 & SR1_RXNE)) {}
+	WAIT_SR1(SR1_RXNE, I2C_ERR_RXNE);
 
 	*data++ = I2C1 -> DR;
+
+	return I2C_OK;
 }
 
-void I2C1_burst_read(char saddr, char maddr, int n, char *data) {
+int I2C1_burst_read(char saddr, char maddr, int n, char *data) {
 	volatile int temp;
 
 	// Wait until bus not busy
-	while(I2C1 -> SR2 & (SR2_BUSY)) {}
+	WAIT_NOT_BUSY();
 
 	// Generate start
 	I2C1 -> CR1 |= CR1_START;
 
 	// Wait until start flag is set
-	while(!(I2C1 -> SR1 & SR1_SB)) {}
+	WAIT_SR1(SR1_SB, I2C_ERR_START);
 
 	// Transmit slave address + write
 	I2C1 -> DR = saddr << 1;
 
 	// Wait until addr flag is set
-	while(!(I2C1 -> SR1 & SR1_ADDR)) {}
+	WAIT_ADDR();
 
 	// Clear addr flag
 	temp = I2C1 -> SR2;
+	(void) temp;
 
 	// Wait until transmitter is empty
-	while(!(I2C1 -> SR1 & SR1_TXE)) {}
+	WAIT_SR1(SR1_TXE, I2C_ERR_TXE);
 	// Send memory address
 	I2C1 -> DR = maddr;
 	// Wait until transmitter is empty
-	while(!(I2C1 -> SR1 & SR1_TXE)) {}
+	WAIT_SR1(SR1_TXE, I2C_ERR_TXE);
 
 	// Generate restart
 	I2C1 -> CR1 |= CR1_START;
 	// Wait until start flag is set
-	while(!(I2C1 -> SR1 & SR1_SB)) {}
+	WAIT_SR1(SR1_SB, I2C_ERR_START);
 	// Transmit slave address + read
 	I2C1 -> DR = saddr << 1 | 1;
 	// Wait until addr flag is set
-	while(!(I2C1 -> SR1 & (SR1_ADDR))) {}
+	WAIT_ADDR();
 	// Clear addr flag
 	temp = I2C1 -> SR2;
+	(void) temp;
 	// Enable acknowledge
 	I2C1 -> CR1 |= CR1_ACK;
 	while(n > 0U) {
@@ -175,48 +226,53 @@ void I2C1_burst_read(char saddr, char maddr, int n, char *data) {
 			// Generate stop
 			I2C1 -> CR1 |= CR1_STOP;
 			// Wait for RXNE flag set
-			while(!(I2C1 -> SR1 & SR1_RXNE)) {}
+			WAIT_SR1(SR1_RXNE, I2C_ERR_RXNE);
 			// Read data from DR
 			*data++ = I2C1 -> DR;
 			break;
 		} else {
 			// Wait until RXNE flag is set
-			while(!(I2C1 -> SR1 & SR1_RXNE)) {}
+			WAIT_SR1(SR1_RXNE, I2C_ERR_RXNE);
 			// Read data from DR
 			(*data++) = I2C1 -> DR;
 			n--;
 		}
 	}
+
+	return I2C_OK;
 }
 
-void I2C1_burst_write(char saddr, char maddr, int n, char *data) {
+int I2C1_burst_write(char saddr, char maddr, int n, char *data) {
 	volatile int temp;
 	// Wait until bus is not busy
-	while(I2C1 -> SR2 & (SR2_BUSY)) {}
+	WAIT_NOT_BUSY();
 	// Generate start
 	I2C1 -> CR1 |= CR1_START;
 	// Wait until start flag is set
-	while(!(I2C1 -> SR1 & (SR1_SB))) {}
+	WAIT_SR1(SR1_SB, I2C_ERR_START);
 	// Transmit slave address
 	I2C1 -> DR = saddr << 1;
 	// Wait until addr flag is set
-	while(!(I2C1 -> SR1 & (SR1_ADDR))) {}
+	WAIT_ADDR();
 	// Clear addr flag
 	temp = I2C1 -> SR2;
+	(void) temp;
 	// Wait until data register is empty
-	while(!(I2C1 -> SR1 & (SR1_TXE))) {}
+	WAIT_SR1(SR1_TXE, I2C_ERR_TXE);
 	// Send memory address
 	I2C1 -> DR = maddr;
 
 	for(int i = 0; i < n; i++) {
 		// Wait until data register is empty
-		while(!(I2C1 -> SR1 & (SR1_TXE))) {}
-		// Transmit memory address
+		WAIT_SR1(SR1_TXE, I2C_ERR_TXE);
+		// Transmit data byte
 		I2C1 -> DR = *data++;
 	}
 
 	// Wait until transfer finished
-	while(!(I2C1 -> SR1 & (SR1_BTF))) {}
+	WAIT_SR1(SR1_BTF, I2C_ERR_BTF);
 	// Generate stop
 	I2C1 -> CR1 |= CR1_STOP;
+
+	return I2C_OK;
 }

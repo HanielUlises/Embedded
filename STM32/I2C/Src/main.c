@@ -9,10 +9,11 @@ int16_t x,y,z;
 float xg, yg, zg;
 
 extern uint8_t data_rec[6];
+extern char data;
 
 int main(void) {
 	uart2_tx_init();
-	setvbuf(stdout, NULL, _IONBF, 0);	/* send each char right away */
+	setvbuf(stdout, NULL, _IONBF, 0);
 	printf("boot\r\n");
 
 	/* ADXL345 CS on D8 (PA9): hold high to select I2C mode */
@@ -21,11 +22,24 @@ int main(void) {
 	GPIOA->MODER |=  (1U << 18);
 	GPIOA->ODR   |=  (1U << 9);
 
-	adxl_init();
-	printf("adxl init done\r\n");
+	int rc = adxl_init();
+	printf("adxl init rc=%d devid=0x%02X (expected 0x%02X)\r\n",
+			rc, (unsigned char) data, ADXL_DEVID);
+
+	if(rc != I2C_OK) {
+		/* Stop here rather than streaming garbage: the rc tells you which
+		 * stage failed, so check wiring/pull-ups/SDO before going further. */
+		printf("adxl not responding, halting\r\n");
+		while(1) {}
+	}
 
 	while(1) {
-		adxl_read_values(DATA_START_ADDR);
+		rc = adxl_read_values(DATA_START_ADDR);
+		if(rc != I2C_OK) {
+			printf("read failed rc=%d\r\n", rc);
+			continue;
+		}
+
 		x = ((data_rec[1] << 8) | data_rec[0]);
 		y = ((data_rec[3] << 8) | data_rec[2]);
 		z = ((data_rec[5] << 8) | data_rec[4]);
