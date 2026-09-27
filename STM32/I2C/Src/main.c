@@ -11,6 +11,13 @@ float xg, yg, zg;
 extern uint8_t data_rec[6];
 extern char data;
 
+/* Called by the startup code before main. The project builds with the hard
+ * float ABI, so the FPU (CP10/CP11) must be on before the first float op,
+ * otherwise that instruction faults and the core sits in Default_Handler. */
+void SystemInit(void) {
+	SCB->CPACR |= (0xFU << 20);
+}
+
 int main(void) {
 	uart2_tx_init();
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -21,6 +28,16 @@ int main(void) {
 	GPIOA->MODER &= ~(3U << 18);
 	GPIOA->MODER |=  (1U << 18);
 	GPIOA->ODR   |=  (1U << 9);
+
+	/* Bus check: PB8/PB9 as plain inputs with pull-up. An idle I2C bus reads
+	 * 1 on both; a 0 means something is holding that line low. */
+	RCC->AHB1ENR |= (1U << 1);
+	GPIOB->MODER &= ~((3U << 16) | (3U << 18));
+	GPIOB->PUPDR &= ~((3U << 16) | (3U << 18));
+	GPIOB->PUPDR |=  ((1U << 16) | (1U << 18));
+	for(volatile int i = 0; i < 1000; i++) {}
+	printf("bus idle: SCL(PB8/D15)=%d SDA(PB9/D14)=%d\r\n",
+			(int)((GPIOB->IDR >> 8) & 1U), (int)((GPIOB->IDR >> 9) & 1U));
 
 	int rc = adxl_init();
 	printf("adxl init rc=%d devid=0x%02X (expected 0x%02X)\r\n",
