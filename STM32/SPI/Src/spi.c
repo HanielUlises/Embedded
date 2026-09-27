@@ -98,3 +98,24 @@ void spi1_transmit(uint8_t *data, uint32_t size) {
 	temp = SPI1 -> SR;
 
 }
+
+void spi1_receive(uint8_t *data, uint32_t size) {
+	while(size) {
+		// Send dummy data
+		SPI1 -> DR = 0;
+		// Wait for RXNE flag to be set
+		while(!(SPI1 -> SR & (SR_RXNE))) {}
+		// Read data from data register
+		*data++ = (SPI1 -> DR);
+		size--;
+	}
+}
+
+void cs_enable(void) {
+	GPIOA -> ODR &= ~(1U << 9);
+}
+
+void cs_disable(void) {
+	GPIOA -> ODR |= (1U << 9);
+}
+
