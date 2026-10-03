@@ -1,0 +1,298 @@
+\documentclass[11pt]{article}
+\usepackage[spanish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2cm]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
+\usepackage{booktabs}
+\usepackage{float}
+
+\tikzset{
+  blk/.style   = {draw, rounded corners, thick, minimum height=1.1cm,
+                  minimum width=2.6cm, align=center, fill=white},
+  sw/.style    = {blk, fill=blue!6},
+  hw/.style    = {blk, fill=orange!10},
+  ft/.style    = {blk, fill=green!8},
+  tbd/.style   = {blk, dashed, fill=gray!8},
+  bus/.style   = {-{Stealth[length=2.5mm]}, thick},
+  bbus/.style  = {{Stealth[length=2.5mm]}-{Stealth[length=2.5mm]}, thick},
+  lbl/.style   = {font=\footnotesize, midway},
+  group/.style = {draw, thick, rounded corners, inner sep=9pt},
+  byte/.style  = {draw, minimum height=0.55cm, minimum width=1.05cm,
+                  font=\scriptsize\ttfamily, inner sep=1pt},
+}
+
+\title{Emulación de tarjeta DAQ tipo Quanser con dsPIC\\
+       \large Esquema de arquitectura}
+\author{Servicio Social}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% ---------------------------------------------------------------------------
+\section{Arquitectura general}
+
+La PC (Simulink en tiempo real) es el \emph{maestro} del lazo de control. Se
+comunica por USB Hi-Speed con un FT2232H-56Q, cuyo canal A trabaja en modo
+MPSSE como \textbf{maestro SPI}. El dsPIC33CK64MC105 (tarjeta Curiosity Nano)
+es el \textbf{esclavo SPI} y hace la función de la DAQ: aplica las salidas al
+motor y regresa las lecturas de encoder, entradas analógicas y digitales.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.0cm and 1.2cm, scale=0.76, transform shape]
+
+  % --- PC ---
+  \node[sw] (sl)  {Simulink\\(modelo de control)};
+  \node[sw, below=0.8cm of sl] (drv) {S-Function\\D2XX / libMPSSE};
+  \begin{scope}[on background layer]
+    \node[group, fill=blue!2, fit=(sl)(drv),
+          label={[font=\bfseries]above:PC}] (pc) {};
+  \end{scope}
+  \draw[bbus] (sl) -- (drv);
+
+  % --- FTDI ---
+  \node[ft, right=1.9cm of drv] (ftA) {Canal A\\MPSSE\\(SPI maestro)};
+  \node[ft, above=0.8cm of ftA, dashed] (ftB) {Canal B\\UART\\(depuración)};
+  \begin{scope}[on background layer]
+    \node[group, fill=green!2, fit=(ftA)(ftB),
+          label={[font=\bfseries]above:FT2232H-56Q}] (ft) {};
+  \end{scope}
+  \draw[bbus, very thick] (drv) -- node[lbl, above] {USB HS} (ftA);
+
+  % --- dsPIC ---
+  \node[hw, right=2.6cm of ftA] (spi) {SPI1 esclavo\\+ DMA};
+  \node[hw, above=0.8cm of spi] (core) {Lógica DAQ\\(ISR fin de trama)};
+  \node[hw, right=1.0cm of core] (pwm) {PWM};
+  \node[hw, right=1.0cm of spi] (qei) {QEI};
+  \node[hw, below=0.8cm of spi] (gpio) {GPIO / ADC};
+  \begin{scope}[on background layer]
+    \node[group, fill=orange!3, fit=(spi)(core)(pwm)(qei)(gpio),
+          label={[font=\bfseries]above:dsPIC33CK64MC105 Curiosity Nano}] (pic) {};
+  \end{scope}
+  \draw[bbus] (spi) -- node[lbl, left] {buffers} (core);
+  \draw[bus]  (core) -- (pwm);
+  \draw[bus]  (qei.north west) -- (core.south east);
+  \draw[bus]  (gpio.west) -- ++(-0.35,0) |- (core.west);
+
+  \draw[bbus, very thick] (ftA) -- node[lbl, above] {SPI}
+        node[lbl, below, align=center] {\scriptsize SCK, MOSI\\\scriptsize MISO, CS} (spi);
+  \draw[bbus, dashed] (ftB) -- node[lbl, above] {TX/RX} (core);
+
+  % --- planta ---
+  \node[tbd, right=1.3cm of pwm] (hb) {Driver de\\potencia\\(por definir)};
+  \node[hw, below=1.0cm of hb] (motor) {Motor\\+ encoder};
+  \draw[bus] (pwm) -- (hb);
+  \draw[bus] (hb) -- (motor);
+  \draw[bus] (motor.west) -- node[lbl, below] {A, B, I} (qei.east);
+  \draw[bbus, dashed] (gpio.east) -| node[lbl, pos=0.25, below] {DI / DO / AI}
+        ($(motor.south)+(0,-0.05)$);
+\end{tikzpicture}
+\caption{Diagrama de bloques. Bloques punteados: opcionales o por definir.}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{El problema de concurrencia}
+
+SPI es \emph{full-duplex}: en cada pulso de reloj el maestro saca un bit por
+MOSI y al mismo tiempo el esclavo saca un bit por MISO. Escribir y leer
+\textbf{son la misma transferencia}. Consecuencias para el dsPIC como esclavo:
+
+\begin{enumerate}
+  \item \textbf{El esclavo no controla el reloj.} El FT2232H empieza a mandar
+        SCK cuando la PC lo decide. La respuesta del dsPIC debe estar
+        \emph{completa en memoria antes} de que \texttt{CS} baje.
+  \item \textbf{El MPSSE manda los bytes seguidos}, sin pausas. Atender byte por
+        byte con interrupciones solo funciona a SCK muy bajo; con DMA no hay
+        problema.
+  \item \textbf{Trama rota (\emph{torn frame}).} Si el código de control
+        actualiza el buffer de respuesta mientras el DMA lo está transmitiendo,
+        la PC recibe una mezcla de dos muestras (p.\ ej.\ los 2 bytes bajos del
+        encoder de una muestra y los 2 altos de la siguiente).
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\footnotesize]
+  \node[anchor=east] at (-0.2,1.0) {MOSI (PC $\to$ dsPIC)};
+  \node[anchor=east] at (-0.2,0.0) {MISO (dsPIC $\to$ PC)};
+  \foreach \i/\t in {0/A5,1/seq,2/ao0,3/ao1,4/do,5/\dots,6/crc}
+    \node[byte, fill=blue!10] at (\i*1.1+0.55,1.0) {\t};
+  \foreach \i/\t in {0/5A,1/seq,2/enc0,3/enc1}
+    \node[byte, fill=orange!15] at (\i*1.1+0.55,0) {\t};
+  \foreach \i/\t in {4/enc2,5/enc3,6/crc}
+    \node[byte, fill=red!25] at (\i*1.1+0.55,0) {\t};
+  \draw[red!70!black, very thick, -{Stealth}] (4.4,-1.1) node[below, align=center]
+        {la ISR de control reescribe el buffer aquí:\\los bytes siguientes ya son de otra muestra}
+        -- (4.4,-0.35);
+  \draw[{Stealth}-{Stealth}] (0,1.65) -- node[above]{una sola transferencia, \texttt{CS} en bajo} (7.7,1.65);
+\end{tikzpicture}
+\caption{Lectura y escritura ocurren al mismo tiempo; la carrera ocurre sobre
+el buffer de respuesta del esclavo.}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{Solución: buffers dobles con intercambio en el flanco de \texttt{CS}}
+
+La regla central: \textbf{el DMA del SPI es el único que lee el buffer activo},
+y los buffers \textbf{solo se intercambian cuando \texttt{CS} está en alto}
+(entre transferencias). El resto del firmware trabaja siempre sobre el buffer
+inactivo.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.0cm and 1.3cm]
+  \node[sw] (ctl) {Código de control\\(QEI, ADC, DI)};
+  \node[blk, fill=green!8, right=1.4cm of ctl, minimum width=3.2cm] (tx_b)
+        {\texttt{tx[1]} inactivo\\(se llena)};
+  \node[blk, fill=red!8, right=1.4cm of tx_b, minimum width=3.2cm] (tx_a)
+        {\texttt{tx[0]} activo\\(lo lee el DMA)};
+  \node[hw, right=1.3cm of tx_a] (spi) {SPI1\\(MISO)};
+
+  \draw[bus] (ctl) -- node[lbl, above] {escribe} (tx_b);
+  \draw[bus] (tx_a) -- node[lbl, above] {DMA} (spi);
+  \draw[bbus, dashed, red!70!black] (tx_b.south) to[bend right=25]
+        node[lbl, below, align=center] {intercambio de punteros\\en flanco de subida de \texttt{CS}}
+        (tx_a.south);
+
+  \node[hw, below=2.0cm of spi] (spirx) {SPI1\\(MOSI)};
+  \node[blk, fill=blue!8, left=1.3cm of spirx, minimum width=3.2cm] (rx)
+        {\texttt{rx[]}\\(lo llena el DMA)};
+  \node[sw, left=2.0cm of rx] (out) {Aplicar salidas\\(PWM, DO)};
+  \draw[bus] (spirx) -- node[lbl, above] {DMA} (rx);
+  \draw[bus] (rx) -- node[lbl, above] {al subir \texttt{CS}} (out);
+\end{tikzpicture}
+\caption{Separación de contextos en el dsPIC.}
+\end{figure}
+
+Secuencia en la interrupción de fin de trama (\texttt{CS} sube, detectado por
+interrupción de cambio de pin o por el propio SPI):
+\begin{enumerate}
+  \item Verificar encabezado y CRC de \texttt{rx[]}; si fallan, marcar error en \texttt{status}.
+  \item Aplicar salidas: ciclo de trabajo del PWM y salidas digitales.
+  \item Intercambiar \texttt{tx[0]} $\leftrightarrow$ \texttt{tx[1]} y rearmar los DMA de TX y RX.
+  \item Tomar una nueva muestra (QEI, ADC, DI) y escribirla en el buffer inactivo
+        con su CRC, lista para la siguiente transferencia.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section{Diagrama de tiempo de un periodo de muestreo}
+
+La PC marca el tiempo: hace una transferencia SPI por cada paso $T_s$ de
+Simulink, igual que una DAQ real atiende una lectura/escritura por paso.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=1cm, y=0.9cm, font=\footnotesize]
+  \def\H{0.6}
+  \foreach \y/\t in {5/Paso Simulink, 4/\texttt{CS}, 3/MOSI, 2/MISO,
+                     1/ISR fin de trama} {
+    \node[anchor=east] at (-0.2,\y+0.3) {\t};
+  }
+  % pasos
+  \foreach \x in {0,7} {
+    \draw[thick, fill=blue!15] (\x,5) rectangle (\x+1.2,5+\H) node[midway]{cálculo};
+  }
+  \draw[thick] (-0.2,5) -- (14,5);
+  % CS
+  \draw[thick] (0,4+\H) -- (1.4,4+\H) -- (1.4,4) -- (3.6,4) -- (3.6,4+\H)
+        -- (8.4,4+\H) -- (8.4,4) -- (10.6,4) -- (10.6,4+\H) -- (14,4+\H);
+  % MOSI / MISO
+  \draw[thick] (0,3) -- (14,3); \draw[thick] (0,2) -- (14,2);
+  \draw[thick, fill=blue!10] (1.4,3) rectangle (3.6,3+\H) node[midway]{\texttt{ao, do}};
+  \draw[thick, fill=orange!15] (1.4,2) rectangle (3.6,2+\H) node[midway]{\texttt{enc, ai, di}};
+  \draw[thick, fill=blue!10] (8.4,3) rectangle (10.6,3+\H) node[midway]{\texttt{ao, do}};
+  \draw[thick, fill=orange!15] (8.4,2) rectangle (10.6,2+\H) node[midway]{\texttt{enc, ai, di}};
+  % ISR
+  \draw[thick] (0,1) -- (14,1);
+  \draw[thick, fill=red!15] (3.6,1) rectangle (5.0,1+\H) node[midway]{swap};
+  \draw[thick, fill=red!15] (10.6,1) rectangle (12.0,1+\H) node[midway]{swap};
+  % Ts
+  \draw[{Stealth}-{Stealth}] (0,6.1) -- node[above]{$T_s$} (7,6.1);
+  \draw[dashed, gray] (0,0.8) -- (0,6.1); \draw[dashed, gray] (7,0.8) -- (7,6.1);
+  \draw[{Stealth}-{Stealth}, gray] (1.4,0.55) -- node[below]{$\approx 8L/f_{SCK}$} (3.6,0.55);
+\end{tikzpicture}
+\caption{Una transferencia por paso. La ISR debe terminar antes de la siguiente
+bajada de \texttt{CS}.}
+\end{figure}
+
+Las entradas que la PC recibe en el paso $k$ se muestrearon al final de la
+transferencia $k-1$; hay un retardo de un periodo ($z^{-1}$) que debe
+considerarse en el diseño del controlador. Si se necesita menor retardo se
+pueden hacer dos transferencias por paso (una que dispara la muestra y otra que
+la lee), a costa de duplicar el tráfico USB.
+
+% ---------------------------------------------------------------------------
+\section{Recursos asignados}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+Función DAQ & Periférico & Notas \\ \midrule
+Enlace con PC & SPI1 esclavo + 2 DMA & TX y RX; \texttt{SSEN}=1 (usa \texttt{CS}) \\
+Fin de trama & CN en pin \texttt{CS} & flanco de subida $\to$ ISR \\
+Encoder & QEI1 & único QEI (A, B, Index, Home) \\
+Salida al motor & PWM & hacia el driver de potencia \\
+E/S digitales & GPIO (PPS) & pines remapeables \\
+Entradas analógicas & ADC 12 bits & opcional \\
+Depuración & UART1 & canal B del FT2232H o COM de la Curiosity Nano \\
+\bottomrule
+\end{tabular}
+\caption{Asignación propuesta de periféricos del dsPIC33CK64MC105.}
+\end{table}
+
+% ---------------------------------------------------------------------------
+\section{Protocolo SPI propuesto}
+
+Como SPI es full-duplex, \textbf{las dos tramas miden lo mismo} ($L = 16$ bytes
+propuesto); los bytes sobrantes se rellenan con ceros. Modo SPI 0 (CPOL=0,
+CPHA=0), que el MPSSE soporta directamente.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}rll|ll@{}}
+\toprule
+Byte & MOSI (PC $\to$ dsPIC) & & MISO (dsPIC $\to$ PC) & \\ \midrule
+0     & \texttt{0xA5} & inicio            & \texttt{0x5A} & inicio \\
+1     & \texttt{seq}  & secuencia         & \texttt{seq}  & eco de la trama anterior \\
+2--5  & \texttt{ao[2]} & 2 salidas analógicas & \texttt{enc} & conteo QEI, 32 bits \\
+6--9  & \texttt{do}, relleno & salidas digitales & \texttt{ai[2]} & 2 entradas analógicas \\
+10    & relleno & & \texttt{di} & entradas digitales \\
+11    & relleno & & \texttt{status} & error CRC, \emph{overrun} \\
+12--14 & relleno & & relleno & \\
+15    & \texttt{crc} & CRC-8 & \texttt{crc} & CRC-8 \\ \bottomrule
+\end{tabular}
+\caption{Formato de trama. El número de canales es provisional.}
+\end{table}
+
+El eco de \texttt{seq} y el CRC permiten que la PC detecte tramas rotas o
+perdidas en lugar de usarlas como datos válidos.
+
+% ---------------------------------------------------------------------------
+\section{Consideraciones del FT2232H}
+
+\begin{itemize}
+  \item \textbf{Reloj SPI:} el MPSSE llega a 30 MHz. Empezar con 1 MHz
+        (16 bytes $\approx$ 128\,$\mu$s) y subir cuando el DMA esté probado.
+  \item \textbf{Latencia USB:} la transferencia SPI dura microsegundos, pero
+        el viaje de ida y vuelta por USB (petición + respuesta) suele estar en
+        cientos de $\mu$s a $\sim$1 ms. Eso limita $T_s$ en la práctica.
+  \item \textbf{Latency timer:} el valor por defecto del driver es 16 ms; hay
+        que bajarlo al mínimo (\texttt{FT\_SetLatencyTimer}) o el lazo será
+        lento e irregular.
+  \item \textbf{Desde Simulink:} el FT2232H no tiene bloque nativo; se accede
+        con una S-Function en C que use la biblioteca D2XX o libMPSSE-SPI de FTDI.
+\end{itemize}
+
+\paragraph{Pendientes por definir.}
+\begin{itemize}
+  \item Confirmar que los pines del canal A del FT2232H van a SCK/MOSI/MISO/CS del dsPIC.
+  \item Driver de potencia entre el PWM y el motor (número de parte).
+  \item Periodo de muestreo $T_s$ objetivo y número de canales AI/AO/DI/DO.
+  \item Cómo corre Simulink en tiempo real (Simulink Desktop Real-Time u otro).
+\end{itemize}
+
+\end{document}
