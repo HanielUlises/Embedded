@@ -49,5 +49,5 @@ void DMA1_Stream6_IRQHandler(void) {
 		// CLear flag
 		DMA1 -> HIFCR |= HIFCR_CTCIF6;
 		dma_callback();
-	}
+		}
 }

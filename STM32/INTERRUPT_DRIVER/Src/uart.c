@@ -1,15 +1,24 @@
 #include "uart.h"
 
-#define GPIOAEN 		(1U << 0)
-#define UART2EN			(1U << 17)
+#define GPIOAEN 				(1U << 0)
+#define UART2EN					(1U << 17)
 
-#define CR1_TE			(1U << 3)
-#define CR1_RE			(1U << 2)
+#define CR1_TE					(1U << 3)
+#define CR1_RE					(1U << 2)
 
-#define CR1_UE			(1U << 13)
-#define SR_TXE			(1U << 7)
-#define SR_RXNE			(1U << 5)
-#define CR1_RXNEIE		(1U << 5)
+#define CR1_UE					(1U << 13)
+#define SR_TXE					(1U << 7)
+#define SR_RXNE					(1U << 5)
+#define CR1_RXNEIE				(1U << 5)
+
+#define DMA1EN					(1U << 21)
+#define DMA_S_EN				(1U << 0)
+#define CHSEL4					(1U << 27)
+#define DMA_MEM_INC				(1U << 10)
+#define DMA_DIR_MEM_TO_PERIPH	(1U << 16)
+#define DMA_CR_TCIE				(1U << 14)
+#define DMA_CR_EN				(1U << 0)
+#define UART_CR3_DMAT			(1U << 7)
 
 #define SYS_FREQ		16000000
 #define APB1_CLK		SYS_FREQ
@@ -22,6 +31,44 @@ static uint16_t compute_uart_bd(uint32_t PeriphClk, uint32_t BaudRate) {
 
 static void uart_set_baudrate(USART_TypeDef *USARTx, uint32_t PeriphClk, uint32_t BaudRate) {
 	USARTx -> BRR = compute_uart_bd(PeriphClk, BaudRate);
+}
+
+void dma1_stream6_init(uint32_t src, uint32_t dst, uint32_t len) {
+	// Enable clock access to DMA
+	RCC -> APB1ENR |= DMA1EN;
+	// Disable DMA1 stream6
+	DMA1_Stream6 -> Cr &= ~DMA_S_EN;
+	// Clear all interrupt flags of stream6
+	DMA1 -> HIFCR |= (1U << 16);
+	DMA1 -> HIFCR |= (1U << 17);
+	DMA1 -> HIFCR |= (1U << 18);
+	DMA1 -> HIFCR |= (1U << 19);
+	DMA1 -> HIFCR |= (1U << 20);
+	DMA1 -> HIFCR |= (1U << 21);
+
+	// Set the destination buffer
+	DMA1_Stream6 -> PAR = dst;
+	// Set source buffer
+	DMA1_Stream6 -> M0AR = src;
+	// Set length
+	DMA1_Stream6 -> NDTR = len;
+	// Select stream6 CH4
+	DMA1_Stream6 -> CR = CHSEL4;
+	// Enable memory increment
+	DMA1_Stream6 -> CR |= DMA_MEM_INC;
+	// Configure transfer direction
+	DMA1_Stream6 -> CR |= DMA_DIR_MEM_TO_PERIPH;
+	//Enable DMA transfer complete interrupt
+	DMA1_Stream6 -> CR |= DMA_CR_TCIE;
+	// Enable direct mode and disable FIFO
+	DMA1_Stream6 -> FCR = 0;
+	// Enable DMA1 stream6
+	DMA1_Stream6 -> CR |= DMA_CR_EN;
+	// Enable UART2 transmitter MDA
+	USART2 -> CR3 |= UART_CR3_DMAT;
+	// DMA Interrupt enable in NVIC
+	NVIC_EnableIRQ(DMA1_Stream6_IRQn);
+	// NVIC_EnableIRQ(DMA)
 }
 
 void uart2_write(int ch) {
@@ -47,7 +94,7 @@ void uart2_rx_interrupt_init(void) {
 
 	// Set PA3 mode to alternate function mode
 	GPIOA -> MODER &= ~(1U << 6);
-	GPIOA -> MODER &= (1U << 7);
+	GPIOA -> MODER |= (1U << 7);
 
 	/*************Configure UART module ******************/
 	// Enable clock access to UART2
